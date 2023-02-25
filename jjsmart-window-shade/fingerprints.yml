@@ -1,0 +1,6 @@
+zigbeeManufacturer:
+  - id: "_TZE204_a73shmas/TS0601"
+    deviceLabel: JJSmart Window Shade
+    manufacturer: _TZE204_a73shmas
+    model: TS0601
+    deviceProfileName: jjsmart-window-shade

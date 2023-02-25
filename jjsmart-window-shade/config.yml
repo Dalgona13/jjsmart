@@ -1,0 +1,4 @@
+name: 'JJSmart Window Shade'
+packageKey: 'jjsmart-window-shade'
+permissions:
+  zigbee: {}

@@ -75,6 +75,9 @@ end
 
 
 ----------------- Functions to emit a capability event -------------------
+local function trans_reverse_value(device, level)
+	return device.preferences.reverseDisplay and level or 100 - level
+end
 
 local function getLatestLevel(device)
 	local ret = device:get_latest_state("main", capabilities.windowShadeLevel.ID, capabilities.windowShadeLevel.shadeLevel.NAME)
@@ -86,32 +89,40 @@ local function emit_event_movement_status(device, target_level)
 	local ret = false
 	local current_level = getLatestLevel(device)
 	if current_level ~= nil and current_level ~= target_level then
-		if current_level < target_level then
-			device:emit_event(capabilities.windowShade.windowShade.opening())
-		elseif (current_level > target_level) then
-			device:emit_event(capabilities.windowShade.windowShade.closing())
+		if current_level > target_level then
+			if device.preferences.reverseDisplay then
+				device:emit_event(capabilities.windowShade.windowShade.opening())
+			else
+				device:emit_event(capabilities.windowShade.windowShade.closing())
+			end	
+		elseif (current_level < target_level) then
+			if device.preferences.reverseDisplay then
+				device:emit_event(capabilities.windowShade.windowShade.closing())
+			else
+				device:emit_event(capabilities.windowShade.windowShade.opening())
+			end
 		end
 		ret =  true
 	end
 	return ret
 end
 
-local function emit_event_final_position(device, level)
+local function emit_event_final_position(device, feedback_level)
 	local window_shade_val
-	if type(level) ~= "number" then
+	if type(feedback_level) ~= "number" then
 		window_shade_val = "unknown"
-		level = 50
-	elseif level == 0 then
+		feedback_level = 50
+	elseif feedback_level == 0 then
 		window_shade_val = "open"
-	elseif level == 100 then 
+	elseif feedback_level == 100 then 
 		window_shade_val = "closed"
-	elseif level > 0 and level < 100 then
+	elseif feedback_level > 0 and feedback_level < 100 then
 		window_shade_val = "partially open"
 	else
 		window_shade_val = "unknown"
-		level = 50
+		feedback_level = 50
 	end
-	device:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
+	device:emit_event(capabilities.windowShadeLevel.shadeLevel(trans_reverse_value(device, feedback_level)))
 	device:emit_event(capabilities.windowShade.windowShade(window_shade_val))
 end
 
@@ -127,7 +138,7 @@ local DP_VAL_DIRECT = "\x00"
 local DP_VAL_REVERSE = "\x01"
 
 local function OpenHandler(driver, device, capability_command)
-	local level = getLatestLevel(device)
+	local level = trans_reverse_value(device, getLatestLevel(device))
 	if level == 0 then
 		device:emit_event(capabilities.windowShade.windowShade.open())
 	else
@@ -136,7 +147,7 @@ local function OpenHandler(driver, device, capability_command)
 end
 
 local function CloseHandler(driver, device, capability_command)
-	local level = getLatestLevel(device)
+	local level = trans_reverse_value(device,getLatestLevel(device))
 	if level == 100 then
 		device:emit_event(capabilities.windowShade.windowShade.closed())
 	else
@@ -155,7 +166,7 @@ local function SetShadeLevelHandler(driver, device, capability_command)
 	if level == capability_command.args.shadeLevel then
 		device:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
 	end
-	SendCommand(device, DP_ID_SET_POSITION, DP_TYPE_VALUE, string.pack(">I4", capability_command.args.shadeLevel))--calc_position(device, capability_command.args.shadeLevel)))
+	SendCommand(device, DP_ID_SET_POSITION, DP_TYPE_VALUE, string.pack(">I4", trans_reverse_value(device,capability_command.args.shadeLevel)))
 end
 
 local function PresetPositionHandler(driver, device, capability_command)
@@ -174,17 +185,17 @@ local function TuyaClusterRx(driver, device, zb_rx)
 	if dp_id == 1 then -- 0x01: Control
 		if value == 0 then 		-- 0 : open
 			device:emit_event(capabilities.windowShade.windowShade.opening())
-			device:set_field(MOVING, true)
+			--device:set_field(MOVING, true)
 		elseif value == 1 then	-- 1 : pause
-			device:set_field(MOVING, false)
+			--device:set_field(MOVING, false)
 		elseif value == 2 then	-- 2 : close
 			device:emit_event(capabilities.windowShade.windowShade.closing())
-			device:set_field(MOVING, true)
+			--device:set_field(MOVING, true)
 		end
 	elseif dp_id == 2 then -- 0x02: Set Curtain Position in Percentage	
-		emit_event_movement_status(device, value)
+		emit_event_movement_status(device, trans_reverse_value(device, value))
 	elseif dp_id == 3 then -- 0x03: Current Curtain Position
-		emit_event_final_position(device, value)--calc_position(device, value))
+		emit_event_final_position(device, value)
 	elseif dp_id == 5 then -- 0x05: Reset Direction 
 		device:set_field("DirectionChange",1)
 	elseif dp_id == 7 then -- 0x07: Work state		
@@ -220,7 +231,7 @@ local function device_info_changed(driver, device, event, args)
 			SendCommand(device, DP_ID_RESET_DIRECTION, DP_TYPE_ENUM, device.preferences.reverse and DP_VAL_REVERSE or DP_VAL_DIRECT)
 		end)
 	end
-	if (args.old_st_store.preferences.reverse ~= device.preferences.reverse) ~= (args.old_st_store.preferences.fixPercent ~= device.preferences.fixPercent) then
+	if (args.old_st_store.preferences.reverseDisplay ~= device.preferences.reverseDisplay) then
 		emit_event_final_position(device, 100-getLatestLevel(device))
 	end
 end

@@ -14,5 +14,13 @@ components:
 preferences:
   - preferenceId: reverse
     explicit: true
+  - name: reverseDisplay
+    title: "Reverse Display"
+    description: "Reverse the position to be displayed. "
+    required: true
+    preferenceType: boolean
+    definition:
+      default: false  
   - preferenceId: presetPosition
     explicit: true
+  
